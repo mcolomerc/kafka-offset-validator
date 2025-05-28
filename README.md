@@ -45,26 +45,20 @@ Environment variables can be set in a `.env` file or directly in your shell. Bel
 
 ```dotenv
 # Source Kafka Configuration
-SOURCE_KAFKA_BROKERS="your-source-broker:9092"
-SOURCE_KAFKA_GROUP_ID="your-source-group-id"
+SOURCE_KAFKA_BROKERS="your-source-broker:9092" 
 SOURCE_KAFKA_SASL_MECHANISMS="PLAIN"
 SOURCE_KAFKA_SECURITY_PROTOCOL="SASL_SSL"
 SOURCE_KAFKA_SASL_USERNAME="your-source-username"
 SOURCE_KAFKA_SASL_PASSWORD="your-source-password"
-SOURCE_KAFKA_CLIENT_ID="go-offset-validator"
-SOURCE_KAFKA_SESSION_TIMEOUT_MS="6000"
-SOURCE_KAFKA_AUTO_OFFSET_RESET="earliest"
+SOURCE_KAFKA_CLIENT_ID="go-offset-validator" 
 
 # Destination Kafka Configuration
-DESTINATION_KAFKA_BROKERS="your-destination-broker:9092"
-DESTINATION_KAFKA_GROUP_ID="your-destination-group-id"
+DESTINATION_KAFKA_BROKERS="your-destination-broker:9092" 
 DESTINATION_KAFKA_SASL_MECHANISMS="PLAIN"
 DESTINATION_KAFKA_SECURITY_PROTOCOL="SASL_SSL"
 DESTINATION_KAFKA_SASL_USERNAME="your-destination-username"
 DESTINATION_KAFKA_SASL_PASSWORD="your-destination-password"
-DESTINATION_KAFKA_CLIENT_ID="go-offset-validator"
-DESTINATION_KAFKA_SESSION_TIMEOUT_MS="6000"
-DESTINATION_KAFKA_AUTO_OFFSET_RESET="earliest"
+DESTINATION_KAFKA_CLIENT_ID="go-offset-validator" 
 ```
 
 See `.env.template` for an example of how to set up the environment variables.

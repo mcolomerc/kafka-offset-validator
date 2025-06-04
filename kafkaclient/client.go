@@ -35,19 +35,28 @@ func NewKafkaClient(sourceConfig, destConfig *kafka.ConfigMap) (*KafkaClient, er
 	}, nil
 }
 
-type Response struct {
+type ValidateResponse struct {
 	GroupID       string                       `json:"group_id"`
 	Matches       bool                         `json:"matches"`
 	SourceOffsets map[string][]PartitionOffset `json:"source_offsets"`
 	DestOffsets   map[string][]PartitionOffset `json:"destination_offsets"`
 }
 
-func (kc *KafkaClient) ValidateConsumerGroupOffsets(ctx context.Context, groupID string, topics []string) (Response, error) {
+func (kc *KafkaClient) GetClusterAdmin(cluster string) (*kafka.AdminClient, error) {
+	if cluster == "source" {
+		return kc.sourceAdmin, nil
+	} else if cluster == "destination" {
+		return kc.destAdmin, nil
+	}
+	return nil, fmt.Errorf("invalid cluster: %s", cluster)
+}
+
+func (kc *KafkaClient) ValidateConsumerGroupOffsets(ctx context.Context, groupID string, topics []string) (ValidateResponse, error) {
 	fmt.Println("Validating consumer group offsets for group:", groupID, "on topics:", topics)
 
 	// Add a map to return an object result with the information of the offsets for the consumer group on each cluster
 	// Include a boolean indicating if the offsets match
-	response := Response{
+	response := ValidateResponse{
 		GroupID:       groupID,
 		Matches:       true,
 		SourceOffsets: make(map[string][]PartitionOffset),
@@ -204,4 +213,74 @@ func (kc *KafkaClient) DescribeTopic(ctx context.Context, a *kafka.AdminClient, 
 		return kafka.DescribeTopicsResult{}, err
 	}
 	return describeTopicsResult, nil
+}
+
+func (kc *KafkaClient) GetOffsetsAtTimestamp(
+	ctx context.Context,
+	a *kafka.AdminClient,
+	topic string,
+	timestamp int64,
+) ([]kafka.TopicPartition, error) {
+	fmt.Printf("Getting offsets for topic %s at timestamp %d\n", topic, timestamp)
+
+	// First describe the topic to get all partitions
+	describeResult, err := a.DescribeTopics(
+		ctx, kafka.NewTopicCollectionOfTopicNames([]string{topic}),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to describe topic %s: %w", topic, err)
+	}
+
+	var partitions []kafka.TopicPartition
+	for _, topicDesc := range describeResult.TopicDescriptions {
+		if topicDesc.Name != topic || topicDesc.Error.Code() != kafka.ErrNoError {
+			continue
+		}
+		for _, p := range topicDesc.Partitions {
+			partitions = append(partitions, kafka.TopicPartition{
+				Topic:     &topic,
+				Partition: int32(p.Partition),
+			})
+		}
+	}
+
+	// Build the map of TopicPartition to OffsetSpec for the given timestamp
+	offsets := make(map[kafka.TopicPartition]kafka.OffsetSpec)
+	for _, tp := range partitions {
+		var offsetSpec kafka.OffsetSpec
+		switch timestamp {
+		case -1:
+			offsetSpec = kafka.NewOffsetSpecForTimestamp(int64(kafka.OffsetEnd))
+		case -2:
+			offsetSpec = kafka.NewOffsetSpecForTimestamp(int64(kafka.OffsetBeginning))
+		case 0:
+			// If timestamp is 0 (not provided), use latest
+			offsetSpec = kafka.NewOffsetSpecForTimestamp(int64(kafka.OffsetEnd))
+		default:
+			offsetSpec = kafka.NewOffsetSpecForTimestamp(timestamp)
+		}
+		offsets[tp] = offsetSpec
+	}
+
+	// Use ListOffsets to get offsets at the specified timestamp
+	res, err := a.ListOffsets(ctx, offsets, kafka.SetAdminIsolationLevel(kafka.IsolationLevelReadCommitted))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list offsets at timestamp: %w", err)
+	}
+
+	// Extract the actual offset values from the response
+	var topicPartitions []kafka.TopicPartition
+	for tp, resultInfo := range res.ResultInfos {
+		if resultInfo.Error.Code() != kafka.ErrNoError {
+			fmt.Printf("Error getting offset for partition %d: %v\n", tp.Partition, resultInfo.Error)
+			continue
+		}
+		topicPartitions = append(topicPartitions, kafka.TopicPartition{
+			Topic:     tp.Topic,
+			Partition: tp.Partition,
+			Offset:    resultInfo.Offset,
+		})
+		fmt.Printf("Found offset %d for partition %d at timestamp %d\n", resultInfo.Offset, tp.Partition, timestamp)
+	}
+	return topicPartitions, nil
 }

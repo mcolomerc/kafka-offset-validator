@@ -230,7 +230,7 @@ You can use the output directly in your Terraform configuration, Terraform varia
 
 Having the following Terraform variable defined:
 
-```json
+```terraform
 variable "connectors_offsets" {
   type = list(object({
     name = string
